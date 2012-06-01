@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Search</key>
+	<dict>
+		<key>UStream</key>
+		<dict/>
+	</dict>
+  <key>PlexFrameworkFlags</key>
+  <array>
+    <string>UseRealRTMP</string>
+  </array>
+	<key>URL</key>
+  	<dict>
+    	<key>UStream</key>
+    	<dict>
+      	<key>URLPatterns</key>
+      		<array>
+        		<string>http://([^.]+.)?ustream.tv/.+</string>
+      		</array>
+      	<key>TestURLs</key>
+      		<array>
+        		<string>http://www.ustream.tv/channel/live-iss-stream</string>
+      		</array>
+    	</dict>
+  	</dict>
+</dict>
+</plist>
