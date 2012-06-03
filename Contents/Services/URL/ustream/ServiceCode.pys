@@ -1,157 +1,36 @@
-#import binascii
-#from base64 import b64decode
-#import urllib2
+import re
+
+USTREAM_KEY       = '8C8687A40DFFF62C23AAE5E021BD2BFE'
+USTREAM_INFO_URL  = 'http://api.ustream.tv/json/channel/%s/getInfo?key=%s'
 
 def MetadataObjectForURL(url):
 
-  USTREAM_KEY       = '8C8687A40DFFF62C23AAE5E021BD2BFE'
+  Log('In ustream metadata for URL and URL is ------>' + url)
 
-  #############################################################################
+  json = JSON.ObjectFromURL(USTREAM_INFO_URL % (url[url.rfind('/')+1:], USTREAM_KEY))
+  #Log(JSON.StringFromObject(json))
 
-
-
-
-  # Make this request with media_id from url:
-  # http://cdn-api.vmixcore.com/apis/media.php?action=getMedia&media_id=144284961&atoken=cf15596810c05b64c422e071473549f4
-  # media_id = url[url.rfind('=')+1:]
-  # vmixJSON = JSON.ObjectFromURL(VMIX_METADATA_URL % (media_id, ATOKEN))
-  
-  # Request the nasa.gov URL
-  # page = HTML.ElementFromURL(url)
-
-
-  #Log(HTML.StringFromElement(page))
-  # flashvars = page.xpath('//param[@name="flashvars"]')[0].get('value')
-  # Log('Flashvars----->' + flashvars)
-  # token = flashvars[flashvars.rfind('token='):flashvars.find('&', string.find(flashvars,'token='))]
-  # Log('TOKEN --> ' + token)
-  
-  #vimixMetadataURL = string.rfind(page.xpath('//param[@name="flashvars"]').get('value'),'token=') 
-  
-  # Extract the details available directly form the page.
-  #Log('h2 ELEMENT ----> ' + HTML.StringFromElement(page.xpath('//*[@id="current_video_info"]')[0]))
-  # title = page.xpath('//*[@id="current_video_info"]/h2')[0].text
-  # description = page.xpath('//*[@id="current_video_info"]/p')[0].text
-  # thumb = page.xpath("//head//meta[@property='og:image']")[0].get('content')
+  video = json['results']
+  clip_url = video['url']
+  title = video['title']
+  if video['status'] == 'offline':
+    title = title + ' - Offline'
+  summary = StripHTML(video['description'])
+  thumb = video['imageUrl']['medium']
 
   return VideoClipObject(
-       title = 'temp title',
-       summary = 'temp description',
-       thumb = 'http://some/bogus/thumb.jpg')
-
-  #url = 'http://cdn-api.vmixcore.com/apis/media.php?action=getMediaList&class_id=1&alltime=1&order_method=DESC&get_count=1&order=date_published_start&export=JSONP&limit=%s&start=%s&&metadata=1&external_genre_ids=131&atoken=cf15596810c05b64c422e071473549f4'
-
-  # ## fn args
-  # pagenum = 0
-  # total_pages = 1
-  # videos_per_page = 15
-  # ##
-
-  # jsondata = JSON.ObjectFromURL(url%((total_pages*videos_per_page),(pagenum*videos_per_page)))
-  
-  # #Log(JSON.StringFromObject(jsondata))
-
-  # for item in jsondata['media']:
-  #   Log("token ---> " + item['token'])
-  
-
-
-  #   token = item['token']
-  #   #HTTP.Request('http://cdn-media.vmixcore.com/vmixcore/play/uvp?token=%s&player_name=unified_video_player&output=xml'%token)
-  #   Element = XML.ElementFromURL('http://cdn-media.vmixcore.com/vmixcore/play/uvp?token=%s&player_name=unified_video_player&output=xml'%token) 
-  #   smil = Element.xpath('//play_url')[0].text
-  #   Log('smil is: ' + smil)
-  #   #height = Element.xpath('//height')[0].text
-  #   #width = Element.xpath('//width')[0].text
-  #   #return Redirect (VideoClipObject(smil,width = width,height = height))
-    
-
-  #   oc.add(VideoClipObject(
-  #           url=smil,
-  #           title = item['title'], 
-  #           summary = 'foo summary', 
-  #           thumb = Callback(Thumb, url=item['thumbnail'][0]['url']),
-  #           duration = int(item['duration'])*1000
-  #           ))
-    
-  # #   #oc.add(Function(VideoClipObject(GetVideoFromToken,title=item['title'], thumb=item['thumbnail'][0]['url'],duration=int(item['duration'])*1000),token=item['token']))
+      url = clip_url,
+      title = title,
+      summary = summary,
+      thumb = thumb
+    )
 
 def MediaObjectsForURL(url):
-
-  # Test URL for curl: http://localhost:32400/system/services/url/lookup?url=http%3A//www.ustream.tv/channel/live-iss-stream
-
-  #RE_CHANNEL_ID     = Regex('Channel\sID\:\s+(\d+)')
-  #RE_RTMP_URL       = Regex('(rtmp\:\/\/[^\x00]+)')
-  #RE_STREAM_NAME    = Regex('streamName(?:\W+)([^\x00]+)')
-
-###############################################################################
-
-  # channelId = None
-  #   m = re.search("Channel\sID\:\s+(\d+)", html)
-  #   if (m):
-  #       channelId = m.group(1)
-
-  #html = HTTP.Request(url).content
-  #channelId = RE_CHANNEL_ID.search(html).group(1)
-  #Log('channelId ---> ' + channelId)
-
-  # amfContent = None
-  #   if (channelId):
-  #       amfUrl = ("http://cdngw.ustream.tv/Viewer/getStream/1/"
-  #       + channelId + ".amf")
-  #       response = urllib2.urlopen(amfUrl)
-  #       amfContent = response.read()
- 
-  #       rtmpUrl = re.search("(rtmp\:\/\/[^\x00]+)", amfContent).group(1)
-  #       f = open('tmp.txt', 'w')
-  #       f.write(amfContent)
-  #       streamName = re.search("streamName(?:\W+)([^\x00]+)",
-  #               amfContent).group(1)
-
-  # Log('rtmp_url ---> ' + rtmp_url)
-  # Log('streamName ---> ' + streamname)
-
-  
-#   ATOKEN            = 'cf15596810c05b64c422e071473549f4'
-#   VMIX_METADATA_URL = 'http://cdn-api.vmixcore.com/apis/media.php?action=getMedia&media_id=%s&atoken=%s'
-#   VMIX_PLAY_URL     = 'http://cdn-media.vmixcore.com/vmixcore/play/uvp?token=%s&player_name=unified_video_player&output=xml'
-
-#   # Make this request with media_id from url:
-#   # http://cdn-api.vmixcore.com/apis/media.php?action=getMedia&media_id=144284961&atoken=cf15596810c05b64c422e071473549f4
-#   media_id = url[url.rfind('=')+1:]
-#   vmixJSON = JSON.ObjectFromURL(VMIX_METADATA_URL % (media_id, ATOKEN))
-
-#   # Resulting JSON will have the tokens for the various SWF formats:
-#   #Log(JSON.StringFromObject(vmixJSON))
-#   vmixTokens = vmixJSON['formats']['format']
-
-#   # Play request (returns XML to be parsed for .mp4):
-#   #http://cdn-media.vmixcore.com/vmixcore/play/uvp?token=V0hSCOGPb6M8jJ8WHAVqJ3v9DJZWuogato&player_name=unified_video_player&output=xml
-#   for token in vmixTokens:
-
-#     #Log('TOKEN -----> ' + token['token'])
-    
-#     rawxml = HTTP.Request(VMIX_PLAY_URL % token['token']).content
-#     #Log('rawXML ---> ' + rawxml)
-#     rawxml = rawxml.replace('<![CDATA[','')
-#     rawxml = rawxml.replace(']]>','')
-#     #Log('cleaned rawXML --> ' + rawxml)
-#     playxml = XML.ElementFromString(rawxml)
-
-#     #Log('PLAY XML ---> ' + XML.StringFromElement(playxml))
-
-#     #Log('MP4 URL ---> ' + XML.StringFromElement(XML.ElementFromURL()))
-
-#     mp4url = playxml.xpath('//play_url')[0].text
-#     #Log('mp4obj -->' + XML.StringFromElement(mp4url))
-#     #Log('mp4url ----->' + mp4url)
-
 
   return [
      MediaObject(
          audio_channels = 2,
          parts = [PartObject(key=Callback(PlayVideo, url = url))]
-         #parts = [PartObject(key=HTTPLiveStreamURL(Callback(PlayVideo, url='http://www.ustream.tv/channel/live-iss-stream')))]
      )
   ]
 
@@ -166,6 +45,7 @@ def PlayVideo(url):
   RE_CHANNEL_ID     = Regex('Channel\sID\:\s+(\d+)')
   RE_RTMP_URL       = Regex('(rtmp\:\/\/[^\x00]+)')
   RE_STREAM_NAME    = Regex('streamName(?:\W+)([^\x00]+)')
+  RE_STATUS         = Regex('status(?:\W+)([^\x00]+)')
 
   USTREAM_SWF_URL   = 'http://www.ustream.tv/flash/viewer.swf'
   #USTREAM_SWF_ALT   = 'http://static-cdn1.ustream.tv/swf/live/viewer.swf'
@@ -175,29 +55,52 @@ def PlayVideo(url):
 ###############################################################################
 
   html = HTTP.Request(url).content
+  #Log(html)
   channelId = RE_CHANNEL_ID.search(html).group(1)
-#  Log('channelId ---> ' + channelId)
-
+  #  Log('channelId ---> ' + channelId)
+  # iss-live stream id: 11239762
+  # 
   amf_url = ('http://cdngw.ustream.tv/Viewer/getStream/1/' + channelId + '.amf')
 #  Log ('amf_url ---> ' + amf_url)
   amf_content = HTTP.Request(amf_url).content
-  rtmp_url = RE_RTMP_URL.search(amf_content).group(1)
-#  Log ('rtmp_url ---> ' + rtmp_url)
-  stream_name = RE_STREAM_NAME.search(amf_content).group(1)
-#  Log ('stream_name ---> ' + stream_name)
-  
-    # Request the URL
-    #page = HTTP.Request(url).content
- 
-    # The source of the page actually contains a link to the associated flv file. We can simply find
-    # this by using a regular expression to find it. Then, we just redirect.
-    #video_url = RE_VIDEO_URL.search(page).group('video_url') + ".flv"
- 
-  #return IndirectResponse(VideoClipObject, key=RTMPVideoURL(url=rtmp_url, clip=clip, swf_url=CBS_SWF))
+  status = RE_STATUS.search(amf_content).group(1)
+  Log('Channel status is: ' + status)
+  if status != 'offline':
+    # We're dealing with a live streaming channel
+    rtmp_url = RE_RTMP_URL.search(amf_content).group(1)
+    #  Log ('rtmp_url ---> ' + rtmp_url)
+    stream_name = RE_STREAM_NAME.search(amf_content).group(1)
+    #  Log ('stream_name ---> ' + stream_name)
 
-  return IndirectResponse(VideoClipObject, key = RTMPVideoURL(url=rtmp_url, clip=stream_name, swf_url=USTREAM_SWF_URL, live=True))
-  #return IndirectResponse(VideoClipObject, key = RTMPVideoURL(url=rtmp_url, clip=stream_name, live=True))
-  
+    if 'flash' in rtmp_url:
+      rtmp_url = rtmp_url + '/' + stream_name
+      swf = None
+    else:
+      swf = USTREAM_SWF_URL
+
+    Log('rtmp_url: ' + rtmp_url)
+    Log('stream_name: ' + stream_name)
+    return IndirectResponse(VideoClipObject, key = RTMPVideoURL(url=rtmp_url, clip=stream_name, swf_url=swf, live=True))
+  else:
+    #http://api.ustream.tv/[html|json|xml|php]/[subject]/[subjectUID|scope]/[command]/[otherparams]/?page=[n]&limit=[l]&key=[devkey]
+    #req = 'http://api.ustream.tv/json/channel/iss-live-stream/[command]/[otherparams]/?page=[n]&limit=[l]&key=[devkey]'
+    return None
+
+      # Request the URL
+      #page = HTTP.Request(url).content
+   
+      # The source of the page actually contains a link to the associated flv file. We can simply find
+      # this by using a regular expression to find it. Then, we just redirect.
+      # video_url = RE_VIDEO_URL.search(page).group('video_url') + ".flv"
+   
+    #return IndirectResponse(VideoClipObject, key=RTMPVideoURL(url=rtmp_url, clip=clip, swf_url=CBS_SWF))
 
 def NormalizeURL(url):
   return url
+
+def StripHTML(stringToStrip,paragraphsToNewLines=False):
+  # Srips HTML tags from a string
+  if paragraphsToNewLines:
+    stringToStrip = re.sub(r'<\s*/p>', r'\n\n', stringToStrip)
+  stringToStrip = re.sub(r'<[^>]*>', r'', stringToStrip)
+  return stringToStrip
