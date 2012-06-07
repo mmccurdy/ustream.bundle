@@ -1,22 +1,116 @@
 import re
 
+###############################################################################
+
+USTREAM_SWF_URL   = 'http://www.ustream.tv/flash/viewer.swf'
+USTREAM_AMF_URL   = 'http://cdngw.ustream.tv/Viewer/getStream/1/%s.amf'
+
+USTREAM_LIVE_URL  = 'https://www.ustream.tv/flash/live/1/%s'
+USTREAM_REC_URL   = 'https://www.ustream.tv/recorded/%s'
+
 USTREAM_KEY       = '8C8687A40DFFF62C23AAE5E021BD2BFE'
-USTREAM_INFO_URL  = 'http://api.ustream.tv/json/channel/%s/getInfo?key=%s'
+USTREAM_CH_JSON   = 'http://api.ustream.tv/json/channel/%s/getInfo?key=%s'
+USTREAM_REC_JSON  = 'http://api.ustream.tv/json/video/%s/getInfo?key=%s'
+USTREAM_RPIN      = 'rpin.020926383682605014'
+USTREAM_RGW_URL   = 'http://rgw.ustream.tv/gateway.php'
+
+RE_CHANNEL_ID     = Regex('Channel\sID\:\s+(\d+)')
+RE_RTMP_URL       = Regex('(rtmp\:\/\/[^\x00]+)')
+RE_STREAM_NAME    = Regex('streamName(?:\W+)([^\x00]+)')
+RE_STATUS         = Regex('status(?:\W+)([^\x00]+)')
+
+###############################################################################
+
+
+# Test live URL for PMS: http://localhost:32400/system/services/url/lookup?url=http%3A//www.ustream.tv/channel/live-iss-stream
+# Test recorded URL for PMS: http://localhost:32400/system/services/url/lookup?url=http%3A//www.ustream.tv/recorded/23088640
+# API: http://api.ustream.tv/[html|json|xml|php]/[subject]/[subjectUID|scope]/[command]/[otherparams]/?page=[n]&limit=[l]&key=[devkey]    
 
 def MetadataObjectForURL(url):
-
-  Log('In ustream metadata for URL and URL is ------>' + url)
-
-  json = JSON.ObjectFromURL(USTREAM_INFO_URL % (url[url.rfind('/')+1:], USTREAM_KEY))
+  recorded = '/recorded/' in url
+  if recorded:
+    # For recorded videos, the video ID should be in the URL...
+    video_id = url[url.rfind('/')+1:]
+    json = JSON.ObjectFromURL(USTREAM_REC_JSON % (video_id, USTREAM_KEY))
+  else:
+    # For live channels, look for a video ID in the HTML...
+    html = HTTP.Request(url=url, cacheTime=3).content
+    video_id = RE_CHANNEL_ID.search(html).group(1)
+    json = JSON.ObjectFromURL(USTREAM_CH_JSON % (video_id, USTREAM_KEY))
+  
+  #Log('Found channel id: ' + video_id)
   #Log(JSON.StringFromObject(json))
 
   video = json['results']
-  clip_url = video['url']
+  clip_url = video['embedTagSourceUrl']
   title = video['title']
-  if video['status'] == 'offline':
-    title = title + ' - Offline'
+  try:
+    if video['status'] == 'offline':
+      # Not sure what the policy should be for live channels that happen to be offline at the moment.
+      # Appending "- Offline" would give some warning when accessed from a channel, but probably
+      # doesn't make much sense for the URL service, which will reflect the status at queue time vs.
+      # when the user is about to view it.
+      title = title + ' - Offline'
+  except:
+    pass
   summary = StripHTML(video['description'])
   thumb = video['imageUrl']['medium']
+
+  Log('Using clip url: ' + clip_url)
+
+
+  # I'm sticking a bunch of stuff here so I can run it by querying PMS -- the stuff between the
+  # debug statements actually belongs in PlayVideo().
+  
+  Log('<<<< BEGIN PlayVideo() DEBUGGING OUTPUT >>>>>')
+
+  if recorded:
+    # Pre-recorded videos use a very different mechanism than the live stuff...
+    try:
+      r = HTTP.Request(clip_url, follow_redirects=False).content
+    except Exception, e:
+      if e.headers.has_key('Location'):
+        swf_url = e.headers['Location']
+    
+    # These are the values that we'll need for the AMF...
+    Log('videoId : ' + video_id)  
+    Log('pageUrl : ' + swf_url)
+    Log('rpin    : ' + USTREAM_RPIN)
+
+    client = AMF.RemotingService(url=USTREAM_RGW_URL, user_agent='', client_type=3)
+    # Here's where I'm stuck.  The brightcove example (pasted at the end of this file) uses the
+    # string 'com.brightcove.experience.ExperienceRuntimeFacade' for getService, but I'm not sure
+    # how to find the equivalent for ustream.  There are API docs here: http://developer.ustream.tv/docs
+    # and I suspect what I'm looking for is in the ActionScript API somewhere... 
+    
+    #echo_service = client.getService('tv.ustream.tools')
+ 
+  else:
+    amf_url = (USTREAM_AMF_URL % video_id)
+    amf_content = HTTP.Request(amf_url).content
+    status = RE_STATUS.search(amf_content).group(1)
+
+    Log('Channel status is: ' + status)
+
+    if status != 'offline':
+      # We're dealing with a live streaming channel
+      
+      rtmp_url = RE_RTMP_URL.search(amf_content).group(1)
+      stream_name = RE_STREAM_NAME.search(amf_content).group(1)
+
+      if 'flash' in rtmp_url:
+        rtmp_url = rtmp_url + '/' + stream_name
+        swf = None
+      else:
+        swf = USTREAM_SWF_URL
+
+  try:
+    Log('rtmp_url: ' + rtmp_url)
+    Log('stream_name: ' + stream_name)
+  except:
+    pass
+
+  Log('<<<<< END DEBUGGING OUTPUT >>>>>')
 
   return VideoClipObject(
       url = clip_url,
@@ -33,44 +127,22 @@ def MediaObjectsForURL(url):
          parts = [PartObject(key=Callback(PlayVideo, url = url))]
      )
   ]
-
-# #BASE_URL = 'http://video.euronews.net/'
-# #RE_VIDEO_URL = Regex('videofile:"(?P<video_url>[^"]+)"')
  
 @indirect
 def PlayVideo(url):
 
-# Test URL for curl: http://localhost:32400/system/services/url/lookup?url=http%3A//www.ustream.tv/channel/live-iss-stream
-
-  RE_CHANNEL_ID     = Regex('Channel\sID\:\s+(\d+)')
-  RE_RTMP_URL       = Regex('(rtmp\:\/\/[^\x00]+)')
-  RE_STREAM_NAME    = Regex('streamName(?:\W+)([^\x00]+)')
-  RE_STATUS         = Regex('status(?:\W+)([^\x00]+)')
-
-  USTREAM_SWF_URL   = 'http://www.ustream.tv/flash/viewer.swf'
-  #USTREAM_SWF_ALT   = 'http://static-cdn1.ustream.tv/swf/live/viewer.swf'
-  #USTREAM_SWF_ALT2  = 'http://static-cdn1.ustream.tv/swf/live/viewer.rsl:209.swf'
-
-
-###############################################################################
-
-  html = HTTP.Request(url).content
-  #Log(html)
-  channelId = RE_CHANNEL_ID.search(html).group(1)
-  #  Log('channelId ---> ' + channelId)
-  # iss-live stream id: 11239762
-  # 
-  amf_url = ('http://cdngw.ustream.tv/Viewer/getStream/1/' + channelId + '.amf')
-#  Log ('amf_url ---> ' + amf_url)
+  html = HTTP.Request(url=url, cacheTime=3).content
+  video_id = RE_CHANNEL_ID.search(html).group(1)
+  amf_url = (USTREAM_AMF_URL % video_id)
   amf_content = HTTP.Request(amf_url).content
   status = RE_STATUS.search(amf_content).group(1)
+
   Log('Channel status is: ' + status)
+
   if status != 'offline':
     # We're dealing with a live streaming channel
     rtmp_url = RE_RTMP_URL.search(amf_content).group(1)
-    #  Log ('rtmp_url ---> ' + rtmp_url)
     stream_name = RE_STREAM_NAME.search(amf_content).group(1)
-    #  Log ('stream_name ---> ' + stream_name)
 
     if 'flash' in rtmp_url:
       rtmp_url = rtmp_url + '/' + stream_name
@@ -82,21 +154,14 @@ def PlayVideo(url):
     Log('stream_name: ' + stream_name)
     return IndirectResponse(VideoClipObject, key = RTMPVideoURL(url=rtmp_url, clip=stream_name, swf_url=swf, live=True))
   else:
-    #http://api.ustream.tv/[html|json|xml|php]/[subject]/[subjectUID|scope]/[command]/[otherparams]/?page=[n]&limit=[l]&key=[devkey]
-    #req = 'http://api.ustream.tv/json/channel/iss-live-stream/[command]/[otherparams]/?page=[n]&limit=[l]&key=[devkey]'
     return None
 
-      # Request the URL
-      #page = HTTP.Request(url).content
-   
-      # The source of the page actually contains a link to the associated flv file. We can simply find
-      # this by using a regular expression to find it. Then, we just redirect.
-      # video_url = RE_VIDEO_URL.search(page).group('video_url') + ".flv"
-   
-    #return IndirectResponse(VideoClipObject, key=RTMPVideoURL(url=rtmp_url, clip=clip, swf_url=CBS_SWF))
+####################################################################################################
 
 def NormalizeURL(url):
   return url
+
+####################################################################################################
 
 def StripHTML(stringToStrip,paragraphsToNewLines=False):
   # Srips HTML tags from a string
@@ -104,3 +169,46 @@ def StripHTML(stringToStrip,paragraphsToNewLines=False):
     stringToStrip = re.sub(r'<\s*/p>', r'\n\n', stringToStrip)
   stringToStrip = re.sub(r'<[^>]*>', r'', stringToStrip)
   return stringToStrip
+
+####################################################################################################
+# Brightcove AMF example below here (just pasted for reference, not used).
+
+def AmfRequest(playerID=None, playerKey=None, videoPlayer=None):
+
+  endpoint = AMF_URL
+  if playerKey:
+    endpoint += '?playerKey=%s' % playerKey
+
+  client = AMF.RemotingService(url=endpoint, user_agent='', client_type=3)
+  service = client.getService('com.brightcove.experience.ExperienceRuntimeFacade')
+  
+  AMF.RegisterClass(ContentOverride, 'com.brightcove.experience.ContentOverride')
+  AMF.RegisterClass(ViewerExperienceRequest, 'com.brightcove.experience.ViewerExperienceRequest')
+
+  video_obj = ContentOverride(videoPlayer)
+  experience = ViewerExperienceRequest(playerID, playerKey, video_obj)
+
+  return service.getDataForExperience('', experience)['programmedContent']['videoPlayer']['mediaDTO']
+
+####################################################################################################
+
+class ContentOverride(object):
+  def __init__ (self, videoPlayer=None):
+    self.contentType = int(0)
+    self.contentIds = None
+    self.target = 'videoPlayer'
+    self.contentId = int(videoPlayer)
+    self.featuredRefId = None
+    self.contentRefIds = None
+    self.featuredId = float('nan')
+    self.contentRefId = None
+
+class ViewerExperienceRequest(object):
+  def __init__ (self, playerID=None, playerKey=None, video_obj=None):
+    self.experienceId = int(playerID)
+    self.playerKey = playerKey
+    self.contentOverrides = []
+    self.contentOverrides.append(video_obj)
+    self.TTLToken = ''
+    self.URL = ''
+    self.deliveryType = float('nan')
