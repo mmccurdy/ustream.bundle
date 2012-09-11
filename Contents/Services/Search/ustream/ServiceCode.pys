@@ -1,0 +1,44 @@
+###############################################################################
+
+USTREAM_KEY         = '8C8687A40DFFF62C23AAE5E021BD2BFE'
+USTREAM_URL         = 'http://www.ustream.tv'
+USTREAM_SEARCH_URL  = 'http://www.ustream.tv/discovery/live/all?q=%s'
+
+
+###############################################################################
+def Search(query):
+  oc = ObjectContainer(title2='Search Results')
+  
+  html = HTML.ElementFromURL(USTREAM_SEARCH_URL % (String.Quote(query)))
+  
+  for video in html.xpath('//ul[contains(@class,"recordedShowThumbsV4")]/li'):
+    try:
+      thumbUrl = video.xpath('.//a/span[@class="img"]/img')[0].get('src')
+    except:
+      pass
+    if 'images/blank' in thumbUrl or not thumbUrl:
+      thumbUrl = video.xpath('.//a/span[@class="img"]/img')[0].get('rel')
+    try:
+      if 'extraVideoThumbs' in video.get('class'):
+        break
+    except:
+      pass
+    oc.add(VideoClipObject(
+      url=USTREAM_URL + video.xpath('.//a')[0].get('href'),
+      title=video.xpath('.//h4/a')[0].text.strip() + '(' + video.xpath('.//a[@class="username"]')[0].text.strip() + ')',
+      summary='',
+      duration=0,
+      thumb=Resource.ContentsOfURLWithFallback(thumbUrl, fallback='icon-default.png')
+    ))
+
+  return  oc
+
+###############################################################################
+def Thumb(url):
+  if url:
+    try:
+      data = HTTP.Request(url, cacheTime=CACHE_1MONTH).content
+      return DataObject(data, 'image/jpeg')
+    except:
+      return Redirect(R('icon-default.png'))
+  return None

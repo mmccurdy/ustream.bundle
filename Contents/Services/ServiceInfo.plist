@@ -5,7 +5,11 @@
 	<key>Search</key>
 	<dict>
 		<key>UStream</key>
-		<dict/>
+      <dict>
+        <key>Identifier</key>
+        <string>com.plexapp.plugins.ustream</string>
+      </dict>
+	<dict/>
 	</dict>
   <key>PlexFrameworkFlags</key>
   <array>

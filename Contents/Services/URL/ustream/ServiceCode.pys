@@ -21,14 +21,14 @@ RE_STATUS         = Regex('status(?:\W+)([^\x00]+)')
 
 ###############################################################################
 
-
 # Test live URL for PMS: http://localhost:32400/system/services/url/lookup?url=http%3A//www.ustream.tv/channel/live-iss-stream
 # Test recorded URL for PMS: http://localhost:32400/system/services/url/lookup?url=http%3A//www.ustream.tv/recorded/23088640
 # API: http://api.ustream.tv/[html|json|xml|php]/[subject]/[subjectUID|scope]/[command]/[otherparams]/?page=[n]&limit=[l]&key=[devkey]    
 
+###############################################################################
 def MetadataObjectForURL(url):
-  recorded = '/recorded/' in url
-  if recorded:
+
+  if '/recorded/' in url:
     # For recorded videos, the video ID should be in the URL...
     video_id = url[url.rfind('/')+1:]
     json = JSON.ObjectFromURL(USTREAM_REC_JSON % (video_id, USTREAM_KEY))
@@ -38,29 +38,19 @@ def MetadataObjectForURL(url):
     video_id = RE_CHANNEL_ID.search(html).group(1)
     json = JSON.ObjectFromURL(USTREAM_CH_JSON % (video_id, USTREAM_KEY))
   
-  #Log('Found channel id: ' + video_id)
-  #Log(JSON.StringFromObject(json))
-
   video = json['results']
   clip_url = video['embedTagSourceUrl']
   title = video['title']
-  try:
-    if video['status'] == 'offline':
-      Log(title + ' is currently offline.')
-      # Not sure what the policy should be for live channels that happen to be offline at the moment.
-      # Appending "- Offline" would give some warning when accessed from a channel, but probably
-      # doesn't make much sense for the URL service, which will reflect the status at queue time vs.
-      # when the user is about to view it.
-      # title = title + ' - Offline'
-  except:
-    pass
+  if video['status'] == 'offline':
+    # Playback will fail if a live channel happens to be offline when played.  Log this.
+    Log(title + ' is currently offline.')
   summary = StripHTML(video['description'])
   try:
     thumb = video['imageUrl']['medium']
   except:
     thumb = R('icon-default.png')
 
-  Log('Using clip url: ' + clip_url)
+  # Log('Using clip URL: ' + clip_url)
 
   return VideoClipObject(
       url = clip_url,
@@ -69,6 +59,7 @@ def MetadataObjectForURL(url):
       thumb = thumb
     )
 
+###############################################################################
 def MediaObjectsForURL(url):
 
   return [
@@ -78,6 +69,7 @@ def MediaObjectsForURL(url):
      )
   ]
  
+###############################################################################
 @indirect
 def PlayVideo(url):
 
@@ -87,11 +79,7 @@ def PlayVideo(url):
   amf_content = HTTP.Request(amf_url).content
   status = RE_STATUS.search(amf_content).group(1)
 
-  recorded = '/recorded/' in url
-
-  Log('<<<< BEGIN PlayVideo() DEBUGGING OUTPUT >>>>>')
-
-  if recorded:
+  if '/recorded/' in url:
     # Pre-recorded videos use a very different mechanism than the live stuff...
     try:
       r = HTTP.Request(clip_url, follow_redirects=False).content
@@ -99,64 +87,31 @@ def PlayVideo(url):
       if e.headers.has_key('Location'):
         swf_url = e.headers['Location']
     
-    # These are the values that we'll need for the AMF...
+    # These are the values that we'll eventually need to stick in an AMF POST...
+    
     Log('videoId : ' + video_id)  
     Log('pageUrl : ' + swf_url)
     Log('rpin    : ' + USTREAM_RPIN)
-
-    client = AMF.RemotingService(url=USTREAM_RGW_URL, user_agent='', client_type=3)
-    # Here's where I'm stuck.  The brightcove example (pasted at the end of this file) uses the
-    # string 'com.brightcove.experience.ExperienceRuntimeFacade' for getService, but I'm not sure
-    # how to find the equivalent for ustream.  There are API docs here: http://developer.ustream.tv/docs
-    # and I suspect what I'm looking for is in the ActionScript API somewhere... 
     
-    #echo_service = client.getService('tv.ustream.tools')
+    # ... however, this is not currently supported.
  
   else:
     amf_url = (USTREAM_AMF_URL % video_id)
     amf_content = HTTP.Request(amf_url).content
     status = RE_STATUS.search(amf_content).group(1)
-
-    Log('Channel status is: ' + status)
+    Log('Channel at ' + url + ' is: ' + status)
 
     if status != 'offline':
-      # We're dealing with a live streaming channel
-      
       rtmp_url = RE_RTMP_URL.search(amf_content).group(1)
       stream_name = RE_STREAM_NAME.search(amf_content).group(1)
-
       if 'flash' in rtmp_url:
         rtmp_url = rtmp_url + '/' + stream_name
         swf = None
       else:
         swf = USTREAM_SWF_URL
-
-  try:
-    Log('rtmp_url: ' + rtmp_url)
-    Log('stream_name: ' + stream_name)
-  except:
-    pass
-
-  Log('<<<<< END DEBUGGING OUTPUT >>>>>')
-
-  # Log('Channel status is: ' + status)
-
-  if status != 'offline':
-  #   # We're dealing with a live streaming channel
-  #   rtmp_url = RE_RTMP_URL.search(amf_content).group(1)
-  #   stream_name = RE_STREAM_NAME.search(amf_content).group(1)
-
-  #   if 'flash' in rtmp_url:
-  #     rtmp_url = rtmp_url + '/' + stream_name
-  #     swf = None
-  #   else:
-  #     swf = USTREAM_SWF_URL
-
-  #   Log('rtmp_url: ' + rtmp_url)
-  #   Log('stream_name: ' + stream_name)
-    return IndirectResponse(VideoClipObject, key = RTMPVideoURL(url=rtmp_url, clip=stream_name, swf_url=swf, live=True))
-  else:
-    return None
+      return IndirectResponse(VideoClipObject, key = RTMPVideoURL(url=rtmp_url, clip=stream_name, swf_url=swf, live=True))
+    else:
+      return None
 
 ####################################################################################################
 
@@ -171,45 +126,3 @@ def StripHTML(stringToStrip,paragraphsToNewLines=False):
     stringToStrip = re.sub(r'<\s*/p>', r'\n\n', stringToStrip)
   stringToStrip = re.sub(r'<[^>]*>', r'', stringToStrip)
   return stringToStrip
-
-# Brightcove AMF example below here (just pasted for reference, not used).
-
-def AmfRequest(playerID=None, playerKey=None, videoPlayer=None):
-
-  endpoint = AMF_URL
-  if playerKey:
-    endpoint += '?playerKey=%s' % playerKey
-
-  client = AMF.RemotingService(url=endpoint, user_agent='', client_type=3)
-  service = client.getService('com.brightcove.experience.ExperienceRuntimeFacade')
-  
-  AMF.RegisterClass(ContentOverride, 'com.brightcove.experience.ContentOverride')
-  AMF.RegisterClass(ViewerExperienceRequest, 'com.brightcove.experience.ViewerExperienceRequest')
-
-  video_obj = ContentOverride(videoPlayer)
-  experience = ViewerExperienceRequest(playerID, playerKey, video_obj)
-
-  return service.getDataForExperience('', experience)['programmedContent']['videoPlayer']['mediaDTO']
-
-####################################################################################################
-
-class ContentOverride(object):
-  def __init__ (self, videoPlayer=None):
-    self.contentType = int(0)
-    self.contentIds = None
-    self.target = 'videoPlayer'
-    self.contentId = int(videoPlayer)
-    self.featuredRefId = None
-    self.contentRefIds = None
-    self.featuredId = float('nan')
-    self.contentRefId = None
-
-class ViewerExperienceRequest(object):
-  def __init__ (self, playerID=None, playerKey=None, video_obj=None):
-    self.experienceId = int(playerID)
-    self.playerKey = playerKey
-    self.contentOverrides = []
-    self.contentOverrides.append(video_obj)
-    self.TTLToken = ''
-    self.URL = ''
-    self.deliveryType = float('nan')
