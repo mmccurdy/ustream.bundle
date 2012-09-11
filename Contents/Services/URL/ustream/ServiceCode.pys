@@ -46,22 +46,49 @@ def MetadataObjectForURL(url):
   title = video['title']
   try:
     if video['status'] == 'offline':
+      Log(title + ' is currently offline.')
       # Not sure what the policy should be for live channels that happen to be offline at the moment.
       # Appending "- Offline" would give some warning when accessed from a channel, but probably
       # doesn't make much sense for the URL service, which will reflect the status at queue time vs.
       # when the user is about to view it.
-      title = title + ' - Offline'
+      # title = title + ' - Offline'
   except:
     pass
   summary = StripHTML(video['description'])
-  thumb = video['imageUrl']['medium']
+  try:
+    thumb = video['imageUrl']['medium']
+  except:
+    thumb = R('icon-default.png')
 
   Log('Using clip url: ' + clip_url)
 
+  return VideoClipObject(
+      url = clip_url,
+      title = title,
+      summary = summary,
+      thumb = thumb
+    )
 
-  # I'm sticking a bunch of stuff here so I can run it by querying PMS -- the stuff between the
-  # debug statements actually belongs in PlayVideo().
-  
+def MediaObjectsForURL(url):
+
+  return [
+     MediaObject(
+         audio_channels = 2,
+         parts = [PartObject(key=Callback(PlayVideo, url = url))]
+     )
+  ]
+ 
+@indirect
+def PlayVideo(url):
+
+  html = HTTP.Request(url=url, cacheTime=3).content
+  video_id = RE_CHANNEL_ID.search(html).group(1)
+  amf_url = (USTREAM_AMF_URL % video_id)
+  amf_content = HTTP.Request(amf_url).content
+  status = RE_STATUS.search(amf_content).group(1)
+
+  recorded = '/recorded/' in url
+
   Log('<<<< BEGIN PlayVideo() DEBUGGING OUTPUT >>>>>')
 
   if recorded:
@@ -112,46 +139,21 @@ def MetadataObjectForURL(url):
 
   Log('<<<<< END DEBUGGING OUTPUT >>>>>')
 
-  return VideoClipObject(
-      url = clip_url,
-      title = title,
-      summary = summary,
-      thumb = thumb
-    )
-
-def MediaObjectsForURL(url):
-
-  return [
-     MediaObject(
-         audio_channels = 2,
-         parts = [PartObject(key=Callback(PlayVideo, url = url))]
-     )
-  ]
- 
-@indirect
-def PlayVideo(url):
-
-  html = HTTP.Request(url=url, cacheTime=3).content
-  video_id = RE_CHANNEL_ID.search(html).group(1)
-  amf_url = (USTREAM_AMF_URL % video_id)
-  amf_content = HTTP.Request(amf_url).content
-  status = RE_STATUS.search(amf_content).group(1)
-
-  Log('Channel status is: ' + status)
+  # Log('Channel status is: ' + status)
 
   if status != 'offline':
-    # We're dealing with a live streaming channel
-    rtmp_url = RE_RTMP_URL.search(amf_content).group(1)
-    stream_name = RE_STREAM_NAME.search(amf_content).group(1)
+  #   # We're dealing with a live streaming channel
+  #   rtmp_url = RE_RTMP_URL.search(amf_content).group(1)
+  #   stream_name = RE_STREAM_NAME.search(amf_content).group(1)
 
-    if 'flash' in rtmp_url:
-      rtmp_url = rtmp_url + '/' + stream_name
-      swf = None
-    else:
-      swf = USTREAM_SWF_URL
+  #   if 'flash' in rtmp_url:
+  #     rtmp_url = rtmp_url + '/' + stream_name
+  #     swf = None
+  #   else:
+  #     swf = USTREAM_SWF_URL
 
-    Log('rtmp_url: ' + rtmp_url)
-    Log('stream_name: ' + stream_name)
+  #   Log('rtmp_url: ' + rtmp_url)
+  #   Log('stream_name: ' + stream_name)
     return IndirectResponse(VideoClipObject, key = RTMPVideoURL(url=rtmp_url, clip=stream_name, swf_url=swf, live=True))
   else:
     return None
@@ -170,7 +172,6 @@ def StripHTML(stringToStrip,paragraphsToNewLines=False):
   stringToStrip = re.sub(r'<[^>]*>', r'', stringToStrip)
   return stringToStrip
 
-####################################################################################################
 # Brightcove AMF example below here (just pasted for reference, not used).
 
 def AmfRequest(playerID=None, playerKey=None, videoPlayer=None):
