@@ -6,7 +6,7 @@ USTREAM_URL 	= 'http://www.ustream.tv'
 
 ICON 			= 'icon-default.png'
 ART 			= 'art-default.jpg'
-SEARCH 			= 'search-default.png'
+SEARCH 			= 'icon-search.png'
 
 
 ####################################################################################################
