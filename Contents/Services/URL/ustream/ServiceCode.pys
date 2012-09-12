@@ -2,10 +2,7 @@ import re
 
 ###############################################################################
 
-USTREAM_SWF_URL   = 'http://www.ustream.tv/flash/viewer.swf'
 USTREAM_AMF_URL   = 'http://cdngw.ustream.tv/Viewer/getStream/1/%s.amf'
-
-USTREAM_LIVE_URL  = 'https://www.ustream.tv/flash/live/1/%s'
 USTREAM_REC_URL   = 'http://www.ustream.tv/recorded/%s'
 
 USTREAM_KEY       = '8C8687A40DFFF62C23AAE5E021BD2BFE'
@@ -13,6 +10,7 @@ USTREAM_CH_JSON   = 'http://api.ustream.tv/json/channel/%s/getInfo?key=%s'
 USTREAM_REC_JSON  = 'http://api.ustream.tv/json/video/%s/getInfo?key=%s'
 USTREAM_RPIN      = 'rpin.020926383682605014'
 USTREAM_RGW_URL   = 'http://rgw.ustream.tv/gateway.php'
+USTREAM_SWF_URL   = 'http://www.ustream.tv/flash/viewer.swf'
 
 RE_CHANNEL_ID     = Regex('Channel\sID\:\s+(\d+)')
 RE_RTMP_URL       = Regex('(rtmp\:\/\/[^\x00]+)')
@@ -28,122 +26,124 @@ RE_STATUS         = Regex('status(?:\W+)([^\x00]+)')
 ###############################################################################
 def MetadataObjectForURL(url):
 
-  if '/recorded/' in url:
-    # For recorded videos, the video ID should be in the URL...
-    video_id = url[url.rfind('/')+1:]
-    json = JSON.ObjectFromURL(USTREAM_REC_JSON % (video_id, USTREAM_KEY))
-  else:
-    # For live channels, look for a video ID in the HTML...
-    html = HTTP.Request(url=url, cacheTime=3).content
-    video_id = RE_CHANNEL_ID.search(html).group(1)
-    json = JSON.ObjectFromURL(USTREAM_CH_JSON % (video_id, USTREAM_KEY))
-  
-  video = json['results']
-  clip_url = video['embedTagSourceUrl']
-  title = video['title']
-  if video['status'] == 'offline':
-    # Playback will fail if a live channel happens to be offline when played.  Log this.
-    Log(title + ' is currently offline.')
-  summary = StripHTML(video['description'])
-  try:
-    thumb = video['imageUrl']['medium']
-  except:
-    thumb = R('icon-default.png')
+	if '/recorded/' in url:
+		# For recorded videos, the video ID should be in the URL...
+		video_id = url[url.rfind('/')+1:]
+		Log(USTREAM_REC_JSON % (video_id, USTREAM_KEY))
+		json = JSON.ObjectFromURL(USTREAM_REC_JSON % (video_id, USTREAM_KEY))
+	else:
+		# For live channels, look for a video ID in the HTML...
+		html = HTTP.Request(url=url, cacheTime=3).content
+		video_id = RE_CHANNEL_ID.search(html).group(1)
+		json = JSON.ObjectFromURL(USTREAM_CH_JSON % (video_id, USTREAM_KEY))
+	
+	video = json['results']
+	clip_url = video['embedTagSourceUrl']
+	title = video['title']
+	try:
+		if video['status'] == 'offline':
+			# Playback will fail if a live channel happens to be offline when played.  Log this.
+			Log(title + ' is currently offline.')
+	except:
+		pass
+	summary = StripHTML(video['description'])
+	try:
+		thumb = video['imageUrl']['medium']
+	except:
+		thumb = R('icon-default.png')
 
-  return VideoClipObject(
-      url = clip_url,
-      title = title,
-      summary = summary,
-      thumb = thumb
-    )
+	return VideoClipObject(
+			url = clip_url,
+			title = title,
+			summary = summary,
+			thumb = thumb
+		)
 
 ###############################################################################
 def MediaObjectsForURL(url):
 
-  return [
-     MediaObject(
-         audio_channels = 2,
-         parts = [PartObject(key=Callback(PlayVideo, url = url))]
-     )
-  ]
+	return [
+		 MediaObject(
+				 audio_channels = 2,
+				 parts = [PartObject(key=Callback(PlayVideo, url = url))]
+		 )
+	]
  
 ###############################################################################
 @indirect
 def PlayVideo(url):
 
-  Log('using clip url --->' + url)
+	if '/recorded/' in url:
+		video_id = url[url.rfind('/')+1:]
+		json = JSON.ObjectFromURL(USTREAM_REC_JSON % (video_id, USTREAM_KEY))
+		video = json['results']
+		clip_url = video['embedTagSourceUrl']
 
-  if '/recorded/' in url:
-    video_id = url[url.rfind('/')+1:]
-    json = JSON.ObjectFromURL(USTREAM_REC_JSON % (video_id, USTREAM_KEY))
-    video = json['results']
-    clip_url = video['embedTagSourceUrl']
+		try:
+			r = HTTP.Request(clip_url, follow_redirects=False).content
+		except Exception, e:
+			if e.headers.has_key('Location'):
+				swf_url = e.headers['Location']
+		
+		# Log('videoId : ' + video_id)  
+		# Log('pageUrl : ' + url)
+		# Log('swfUrl  : ' + swf_url)
+		# Log('rpin    : ' + USTREAM_RPIN)
 
-    try:
-      r = HTTP.Request(clip_url, follow_redirects=False).content
-    except Exception, e:
-      if e.headers.has_key('Location'):
-        swf_url = e.headers['Location']
-    
-    # Log('videoId : ' + video_id)  
-    # Log('pageUrl : ' + url)
-    # Log('swfUrl  : ' + swf_url)
-    # Log('rpin    : ' + USTREAM_RPIN)
+		client = AMF.RemotingService(
+			url='http://rgw.ustream.tv/gateway.php',
+			user_agent='Mozilla/5.0 (Macintosh; Intel Mac OS X 10_8_1) AppleWebKit/536.25 (KHTML, like Gecko) Version/6.0 Safari/536.25',
+			amf_version=3
+		)
+		service = client.getService('Viewer')
+		AMF.RegisterClass(GetVideoInfo,'getVideo')
+		videoInfoAMF = GetVideoInfo(video_id=video_id,page_url=url,rpin=USTREAM_RPIN)
 
-    client = AMF.RemotingService(
-      url='http://rgw.ustream.tv/gateway.php',
-      user_agent='Mozilla/5.0 (Macintosh; Intel Mac OS X 10_8_1) AppleWebKit/536.25 (KHTML, like Gecko) Version/6.0 Safari/536.25',
-      amf_version=3
-    )
-    service = client.getService('Viewer')
-    AMF.RegisterClass(GetVideoInfo,'getVideo')
-    videoInfoAMF = GetVideoInfo(video_id=video_id,page_url=url,rpin=USTREAM_RPIN)
+		return IndirectResponse(VideoClipObject, key = service.getVideo(videoInfoAMF)['flv'])
 
-    return IndirectResponse(VideoClipObject, key = service.getVideo(videoInfoAMF)['flv'])
-
-  else:
-    html = HTTP.Request(url=url, cacheTime=3).content
-    video_id = RE_CHANNEL_ID.search(html).group(1)
-    amf_url = (USTREAM_AMF_URL % video_id)
-    amf_content = HTTP.Request(amf_url).content
-    status = RE_STATUS.search(amf_content).group(1)
-    
-    if status != 'offline':
-      rtmp_url = RE_RTMP_URL.search(amf_content).group(1)
-      stream_name = RE_STREAM_NAME.search(amf_content).group(1)
-      if 'flash' in rtmp_url:
-        rtmp_url = rtmp_url + '/' + stream_name
-        swf = None
-      else:
-        swf = USTREAM_SWF_URL
-      return IndirectResponse(VideoClipObject, key = RTMPVideoURL(url=rtmp_url, clip=stream_name, swf_url=swf, live=True))
-    else:
-      Log('Channel at ' + url + ' is: ' + status)
-      return None
+	else:
+		html = HTTP.Request(url=url, cacheTime=3).content
+		video_id = RE_CHANNEL_ID.search(html).group(1)
+		amf_url = (USTREAM_AMF_URL % video_id)
+		amf_content = HTTP.Request(amf_url).content
+		status = RE_STATUS.search(amf_content).group(1)
+		
+		if status != 'offline':
+			rtmp_url = RE_RTMP_URL.search(amf_content).group(1)
+			stream_name = RE_STREAM_NAME.search(amf_content).group(1)
+			if 'flash' in rtmp_url:
+				rtmp_url = rtmp_url + '/' + stream_name
+				swf = None
+			else:
+				swf = USTREAM_SWF_URL
+			return IndirectResponse(VideoClipObject, key = RTMPVideoURL(url=rtmp_url, clip=stream_name, swf_url=swf, live=True))
+		else:
+			Log('Channel at ' + url + ' is currently ' + status + '.')
+			return None
 
 
 ####################################################################################################
 class GetVideoInfo(object):
-  def __init__ (self,video_id,page_url,rpin):
-    self.autoplay = True
-    self.videoId = video_id
-    self.pageUrl = page_url
-    self.rpin = rpin
-    self.locale = 'en_US'
-    self.brandId = '1'
+	def __init__ (self,video_id,page_url,rpin):
+		self.autoplay = True
+		self.videoId = video_id
+		self.pageUrl = page_url
+		self.rpin = rpin
+		self.locale = 'en_US'
+		self.brandId = '1'
+
 
 ####################################################################################################
 def NormalizeURL(url):
-  #http://www.ustream.tv/recorded/25340828/highlight/291652#utm_campaign=fhighlights&utm_source=9&utm_medium=news
-  if '/recorded/' in url:
-    url = USTREAM_REC_URL % url.split('/')[url.split('/').index('recorded')+1]
-    Log('Normalized URL ---> ' + url)
-  return url
+	if '/recorded/' in url:
+		url = USTREAM_REC_URL % url.split('/')[url.split('/').index('recorded')+1]
+	return url
+
 
 ####################################################################################################
 def StripHTML(stringToStrip,paragraphsToNewLines=False):
-  # Srips HTML tags from a string
-  if paragraphsToNewLines:
-    stringToStrip = re.sub(r'<\s*/p>', r'\n\n', stringToStrip)
-  stringToStrip = re.sub(r'<[^>]*>', r'', stringToStrip)
-  return stringToStrip
+	# Srips HTML tags from a string
+	if paragraphsToNewLines:
+		stringToStrip = re.sub(r'<\s*/p>', r'\n\n', stringToStrip)
+	stringToStrip = re.sub(r'<[^>]*>', r'', stringToStrip)
+	return stringToStrip

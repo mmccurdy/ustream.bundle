@@ -1,13 +1,10 @@
-###############################################################################
+####################################################################################################
 
-
-USTREAM_KEY 	= '8C8687A40DFFF62C23AAE5E021BD2BFE'
 USTREAM_URL 	= 'http://www.ustream.tv'
 
 ICON 			= 'icon-default.png'
 ART 			= 'art-default.jpg'
 SEARCH 			= 'icon-search.png'
-
 
 ####################################################################################################
 def Start():
@@ -39,34 +36,13 @@ def MainMenu():
 		url = USTREAM_URL + discoveryPath + '?page=%s'
 		oc.add(DirectoryObject(key=Callback(GetVideos, title=title, url=url),title=title))
 
-	oc.add(SearchDirectoryObject(identifier="com.plexapp.plugins.ustream", title="Search for Live Channels", prompt="Search USTREAM for...", thumb=R(SEARCH), art=R(ART)))
-
-	oc.add(VideoClipObject(
-			url='http://www.ustream.tv/recorded/25340828/highlight/291652#utm_campaign=fhighlights&utm_source=9&utm_medium=news',
-			title='TEST_RECORDED_VIDEO_1',
-			summary='',
-			duration=0
-			#thumb=Resource.ContentsOfURLWithFallback('http://kittenvillage.com/thumb.gif', fallback='icon-default.png')
-		))
-
-	return oc
-
-####################################################################################################
-def ListSubcats(catclass):
-	# Not used at the moment...
-
-	Log('catclass is --> ' + catclass)
-
-	oc = ObjectContainer()
-	html = HTML.ElementFromURL(USTREAM_URL)
-
-	cat = html.xpath('//li[@class="' + catclass + '"]')[0]
-	Log(HTML.StringFromElement(cat))
-	for subcat in cat.xpath('.//div[@class="subNav"]'):
-		Log('Subcat --->' + HTML.StringFromElement(subcat))
-		title = subcat.text
-		catUrl = subcat.get('href')
-		oc.add(DirectoryObject(key=Callback(GetVideos, title=title, url=catUrl)),title=L(title))
+	oc.add(SearchDirectoryObject(
+		identifier="com.plexapp.plugins.ustream",
+		title="Search for Live Channels",
+		prompt="Search USTREAM for...",
+		thumb=R(SEARCH),
+		art=R(ART)
+	))
 
 	return oc
 
@@ -74,7 +50,6 @@ def ListSubcats(catclass):
 def GetVideos(title, url, page=1, cacheTime=CACHE_1HOUR):
 
 	oc = ObjectContainer(title2='%s - %d' % (title, page), view_group='InfoList')
-
 
 	html = HTML.ElementFromURL(url % page, cacheTime=cacheTime)
 
