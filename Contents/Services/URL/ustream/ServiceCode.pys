@@ -6,7 +6,7 @@ USTREAM_SWF_URL   = 'http://www.ustream.tv/flash/viewer.swf'
 USTREAM_AMF_URL   = 'http://cdngw.ustream.tv/Viewer/getStream/1/%s.amf'
 
 USTREAM_LIVE_URL  = 'https://www.ustream.tv/flash/live/1/%s'
-USTREAM_REC_URL   = 'https://www.ustream.tv/recorded/%s'
+USTREAM_REC_URL   = 'http://www.ustream.tv/recorded/%s'
 
 USTREAM_KEY       = '8C8687A40DFFF62C23AAE5E021BD2BFE'
 USTREAM_CH_JSON   = 'http://api.ustream.tv/json/channel/%s/getInfo?key=%s'
@@ -50,8 +50,6 @@ def MetadataObjectForURL(url):
   except:
     thumb = R('icon-default.png')
 
-  # Log('Using clip URL: ' + clip_url)
-
   return VideoClipObject(
       url = clip_url,
       title = title,
@@ -73,34 +71,43 @@ def MediaObjectsForURL(url):
 @indirect
 def PlayVideo(url):
 
-  html = HTTP.Request(url=url, cacheTime=3).content
-  video_id = RE_CHANNEL_ID.search(html).group(1)
-  amf_url = (USTREAM_AMF_URL % video_id)
-  amf_content = HTTP.Request(amf_url).content
-  status = RE_STATUS.search(amf_content).group(1)
+  Log('using clip url --->' + url)
 
   if '/recorded/' in url:
-    # Pre-recorded videos use a very different mechanism than the live stuff...
+    video_id = url[url.rfind('/')+1:]
+    json = JSON.ObjectFromURL(USTREAM_REC_JSON % (video_id, USTREAM_KEY))
+    video = json['results']
+    clip_url = video['embedTagSourceUrl']
+
     try:
       r = HTTP.Request(clip_url, follow_redirects=False).content
     except Exception, e:
       if e.headers.has_key('Location'):
         swf_url = e.headers['Location']
     
-    # These are the values that we'll eventually need to stick in an AMF POST...
-    
-    Log('videoId : ' + video_id)  
-    Log('pageUrl : ' + swf_url)
-    Log('rpin    : ' + USTREAM_RPIN)
-    
-    # ... however, this is not currently supported.
- 
+    # Log('videoId : ' + video_id)  
+    # Log('pageUrl : ' + url)
+    # Log('swfUrl  : ' + swf_url)
+    # Log('rpin    : ' + USTREAM_RPIN)
+
+    client = AMF.RemotingService(
+      url='http://rgw.ustream.tv/gateway.php',
+      user_agent='Mozilla/5.0 (Macintosh; Intel Mac OS X 10_8_1) AppleWebKit/536.25 (KHTML, like Gecko) Version/6.0 Safari/536.25',
+      amf_version=3
+    )
+    service = client.getService('Viewer')
+    AMF.RegisterClass(GetVideoInfo,'getVideo')
+    videoInfoAMF = GetVideoInfo(video_id=video_id,page_url=url,rpin=USTREAM_RPIN)
+
+    return IndirectResponse(VideoClipObject, key = service.getVideo(videoInfoAMF)['flv'])
+
   else:
+    html = HTTP.Request(url=url, cacheTime=3).content
+    video_id = RE_CHANNEL_ID.search(html).group(1)
     amf_url = (USTREAM_AMF_URL % video_id)
     amf_content = HTTP.Request(amf_url).content
     status = RE_STATUS.search(amf_content).group(1)
-    Log('Channel at ' + url + ' is: ' + status)
-
+    
     if status != 'offline':
       rtmp_url = RE_RTMP_URL.search(amf_content).group(1)
       stream_name = RE_STREAM_NAME.search(amf_content).group(1)
@@ -111,15 +118,29 @@ def PlayVideo(url):
         swf = USTREAM_SWF_URL
       return IndirectResponse(VideoClipObject, key = RTMPVideoURL(url=rtmp_url, clip=stream_name, swf_url=swf, live=True))
     else:
+      Log('Channel at ' + url + ' is: ' + status)
       return None
 
-####################################################################################################
 
+####################################################################################################
+class GetVideoInfo(object):
+  def __init__ (self,video_id,page_url,rpin):
+    self.autoplay = True
+    self.videoId = video_id
+    self.pageUrl = page_url
+    self.rpin = rpin
+    self.locale = 'en_US'
+    self.brandId = '1'
+
+####################################################################################################
 def NormalizeURL(url):
+  #http://www.ustream.tv/recorded/25340828/highlight/291652#utm_campaign=fhighlights&utm_source=9&utm_medium=news
+  if '/recorded/' in url:
+    url = USTREAM_REC_URL % url.split('/')[url.split('/').index('recorded')+1]
+    Log('Normalized URL ---> ' + url)
   return url
 
 ####################################################################################################
-
 def StripHTML(stringToStrip,paragraphsToNewLines=False):
   # Srips HTML tags from a string
   if paragraphsToNewLines:

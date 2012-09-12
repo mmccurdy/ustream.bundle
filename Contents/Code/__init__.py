@@ -41,6 +41,14 @@ def MainMenu():
 
 	oc.add(SearchDirectoryObject(identifier="com.plexapp.plugins.ustream", title="Search for Live Channels", prompt="Search USTREAM for...", thumb=R(SEARCH), art=R(ART)))
 
+	oc.add(VideoClipObject(
+			url='http://www.ustream.tv/recorded/25340828/highlight/291652#utm_campaign=fhighlights&utm_source=9&utm_medium=news',
+			title='TEST_RECORDED_VIDEO_1',
+			summary='',
+			duration=0
+			#thumb=Resource.ContentsOfURLWithFallback('http://kittenvillage.com/thumb.gif', fallback='icon-default.png')
+		))
+
 	return oc
 
 ####################################################################################################
