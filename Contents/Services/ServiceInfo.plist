@@ -27,7 +27,7 @@
         		<string>http://www.ustream.tv/channel/live-iss-stream</string>
             <string>http://www.ustream.tv/channel/little-house-live-2-lower</string>
             <string>http://www.ustream.tv/recorded/24656151</string>
-            <string>http://www.ustream.tv/recorded/25340828/highlight/291652#utm_campaign=fhighlights&utm_source=9&utm_medium=news</string>
+            <string>http://www.ustream.tv/recorded/25340828/highlight/291652#utm_campaign=fhighlights&amp;utm_source=9&amp;utm_medium=news</string>
       		</array>
     	</dict>
   	</dict>
