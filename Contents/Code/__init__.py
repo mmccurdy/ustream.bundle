@@ -1,7 +1,19 @@
 ####################################################################################################
 
 USTREAM_URL 	= 'http://www.ustream.tv'
-
+DISCOVERY_URL	= USTREAM_URL + '/discovery/live/'
+CATEGORIES		= [ 
+					{ 'title' :  'On Air', 'path' : 'all'},
+					{ 'title' :  'News', 'path' : 'news'},
+					{ 'title' :  'Pets & Animals', 'path' : 'animals'},
+					{ 'title' :  'Entertainment', 'path' : 'entertainment'},
+					{ 'title' :  'Sports', 'path' : 'sports'},
+					{ 'title' :  'Music', 'path' : 'music'},
+					{ 'title' :  'Gaming', 'path' : 'gaming'},
+					{ 'title' :  'Events', 'path' : 'events'},
+					{ 'title' :  'Tech', 'path' : 'technology'}
+				  ]
+				  
 ICON 			= 'icon-default.png'
 ART 			= 'art-default.jpg'
 SEARCH 			= 'icon-search.png'
@@ -28,13 +40,28 @@ def MainMenu():
 	oc = ObjectContainer()
 	html = HTML.ElementFromURL(USTREAM_URL)
 
+	discoveryCats=[]
 	for cat in html.xpath('//ul[@class="categories"]/li[contains(@class,"cat")]'):
-		title = L(cat.xpath('.//a/span')[0].text.strip())
-		discoveryPath = cat.xpath('.//div[@class="subNav"]')[0].get('data-discovery')
-		if discoveryPath is None:
-			discoveryPath = cat.xpath('.//a')[0].get('href')
-		url = USTREAM_URL + discoveryPath + '?page=%s'
-		oc.add(DirectoryObject(key=Callback(GetVideos, title=title, url=url),title=title))
+		title = cat.xpath('.//a/span')[0].text.strip()
+		try:
+			discoveryPath = cat.xpath('.//div[@class="subNav"]')[0].get('data-discovery')
+			if discoveryPath is None:
+				try:		
+					discoveryPath = cat.xpath('.//a')[0].get('href')
+				except:
+					pass
+			url = USTREAM_URL + discoveryPath + '?page=%s'
+			discoveryCats.append({'title' : title, 'url':url})
+		except:
+			pass
+	# Use a hard-coded cat list for non-US and other sites that use a slightly different nav
+	# since obtaining these otherwise would be a second page load per category.
+	if len(discoveryCats) < 3:
+		discoveryCats = []
+		for cat in CATEGORIES:
+			discoveryCats.append({ 'title' : cat['title'] , 'url' : DISCOVERY_URL + cat['path'] + '?page=%s' })
+	for cat in discoveryCats:
+		oc.add(DirectoryObject(key=Callback(GetVideos, title=cat['title'], url=cat['url']), title=cat['title']))
 
 	oc.add(SearchDirectoryObject(
 		identifier="com.plexapp.plugins.ustream",
@@ -56,7 +83,14 @@ def GetVideos(title, url, page=1, cacheTime=CACHE_1HOUR):
 	for video in html.xpath('//ul[contains(@class,"recordedShowThumbsV4")]/li'):
 		thumbUrl = video.xpath('.//a/span[@class="img"]/img')[0].get('src')
 		if 'images/blank' in thumbUrl:
-			thumbUrl = video.xpath('.//a/span[@class="img"]/img')[0].get('rel')
+			try:
+				thumbUrl = video.xpath('.//img')[0].get('src')
+				if thumbUrl.startswith('data:image'):
+					thumbUrl = video.xpath('.//img')[0].get('data-lazyload')
+				elif 'images/blank' in thumbUrl:
+					thumbUrl = video.xpath('.//a/span[@class="img"]/img')[0].get('rel')
+			except:
+				thumbUrl = None
 		oc.add(VideoClipObject(
 			url=USTREAM_URL + video.xpath('.//a')[0].get('href'),
 			title=video.xpath('.//h4/a')[0].text.strip() + ' (' + video.xpath('.//a[@class="username"]')[0].text.strip() + ')',
